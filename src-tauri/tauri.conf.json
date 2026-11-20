@@ -29,7 +29,7 @@
         "label": "bubble",
         "title": "申时提醒",
         "width": 326,
-        "height": 120,
+        "height": 70,
         "visible": false,
         "resizable": false,
         "decorations": false,

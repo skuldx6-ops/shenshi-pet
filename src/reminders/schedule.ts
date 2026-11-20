@@ -146,7 +146,7 @@ export function collectDue(settings: AppSettings, now = new Date()): {
   if (!next.focusMode) {
     if (next.eyeEnabled && current >= next.nextEyeAt) {
       if (dueWithin(current, next.nextEyeAt)) {
-        due.push({ id: `eye:${next.nextEyeAt}`, kind: "eye", title: "请注视 6 米外物体", body: "给瞳孔放个短假，让世界重回清晰。", at: next.nextEyeAt });
+        due.push({ id: `eye:${next.nextEyeAt}`, kind: "eye", title: "护眼休息", body: "给瞳孔放个短假，让世界重回清晰。", at: next.nextEyeAt });
       }
       next.nextEyeAt = current + Math.max(next.eyeMinutes, 1) * 60_000;
     }

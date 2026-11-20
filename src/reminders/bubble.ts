@@ -1,16 +1,7 @@
 import { emit, listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ReminderEvent, ReminderKind } from "./schedule";
 
 const ACTIVE_KEY = "shenshi-pet-active-reminder";
-const PLACEMENT_KEY = "shenshi-pet-bubble-placement";
-const captions: Record<ReminderKind, string> = {
-  eye: "护眼提醒",
-  drink: "饮水提醒",
-  lunch: "11:30 午饭提醒",
-  checkin: "温馨提醒",
-  custom: "自定义提醒",
-};
 
 function escapeHTML(value: string): string {
   return value.replace(/[&<>"']/g, (char) => ({
@@ -18,43 +9,43 @@ function escapeHTML(value: string): string {
   })[char] ?? char);
 }
 
+/** Match the original app's orange header copy while keeping this bubble text only. */
+function header(kind: ReminderKind, now = new Date()): string {
+  if (kind === "eye") return "请注视 6 米外物体";
+  const date = `${now.getMonth() + 1}月${now.getDate()}日`;
+  switch (kind) {
+    case "drink":
+    case "custom": return `${date} 温馨提示`;
+    case "lunch": return `${date} 今天宜吃`;
+    case "checkin": return `${date} 温馨提醒`;
+  }
+}
+
 export function startBubble(root: HTMLElement): void {
-  const bubble = getCurrentWindow();
-  let current: ReminderEvent | null = null;
-
-  function render(reminder: ReminderEvent | null): void {
-    current = reminder;
-    if (!reminder) {
-      root.innerHTML = "";
-      return;
-    }
-    root.innerHTML = `
-      <section class="reminder-card" role="alert">
-        <div class="reminder-copy">
-          <span class="reminder-eyebrow">${captions[reminder.kind]}</span>
-          <strong>${escapeHTML(reminder.title)}</strong>
-          <p>${escapeHTML(reminder.body)}</p>
-        </div>
-        <button class="bubble-close" aria-label="关闭提醒" title="关闭提醒">×</button>
-      </section>`;
-    root.querySelector(".bubble-close")?.addEventListener("click", () => void close());
+  function render(reminders: ReminderEvent[]): void {
+    root.innerHTML = `<div class="reminder-stack" role="group" aria-label="申时提醒">
+      ${reminders.map((reminder) => `
+        <section class="reminder-card" role="alert">
+          <div class="reminder-copy">
+            <span class="reminder-eyebrow">${escapeHTML(header(reminder.kind))}</span>
+            <strong>${escapeHTML(reminder.title)}</strong>
+          </div>
+          <button class="bubble-close" data-id="${escapeHTML(reminder.id)}" aria-label="关闭${escapeHTML(reminder.title)}" title="关闭提醒">×</button>
+        </section>`).join("")}
+    </div>`;
   }
 
-  async function close(): Promise<void> {
-    const id = current?.id;
-    if (!id) return;
-    await bubble.hide();
-    render(null);
-    await emit("reminder-closed", id);
-  }
+  root.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>(".bubble-close");
+    if (button?.dataset.id) void emit("reminder-closed", button.dataset.id);
+  });
 
-  document.body.dataset.placement = localStorage.getItem(PLACEMENT_KEY) ?? "above";
   const saved = localStorage.getItem(ACTIVE_KEY);
   if (saved) {
-    try { render(JSON.parse(saved) as ReminderEvent); } catch { /* ignore stale content */ }
-  }
-  void listen<ReminderEvent>("reminder-show", ({ payload }) => render(payload));
-  void listen<"above" | "below">("bubble-placement", ({ payload }) => {
-    document.body.dataset.placement = payload;
-  });
+    try {
+      const parsed: unknown = JSON.parse(saved);
+      render(Array.isArray(parsed) ? parsed as ReminderEvent[] : []);
+    } catch { render([]); }
+  } else render([]);
+  void listen<ReminderEvent[]>("reminders-show", ({ payload }) => render(payload));
 }

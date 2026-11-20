@@ -9,7 +9,7 @@ import checkinAnimation from "../assets/animations/daka.webp";
 import customAnimation from "../assets/animations/custom.webp";
 import { collectDue, loadSettings, saveSettings, updateFocus } from "../reminders/schedule";
 import type { ReminderEvent, ReminderKind } from "../reminders/schedule";
-import { positionBubbleNearPet, showSettingsWindow } from "../shared/windows";
+import { MAX_VISIBLE_REMINDERS, positionBubbleNearPet, resizeBubbleForReminders, showSettingsWindow } from "../shared/windows";
 
 const ACTIVE_KEY = "shenshi-pet-active-reminder";
 const animations: Record<ReminderKind, string> = {
@@ -30,9 +30,11 @@ const displayMs: Record<ReminderKind, number> = {
 export function startPet(root: HTMLElement): void {
   const pet = getCurrentWindow();
   let settings = loadSettings();
-  let active: ReminderEvent | null = null;
-  let closeTimer: ReturnType<typeof setTimeout> | null = null;
-  const queue: ReminderEvent[] = [];
+  const visible: ReminderEvent[] = [];
+  const pending: ReminderEvent[] = [];
+  const closeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  let bubbleSync: Promise<void> = Promise.resolve();
+  let playingKind: ReminderKind | null = null;
   let menuOpen = false;
   let pointerStart: { x: number; y: number } | null = null;
   let dragged = false;
@@ -62,50 +64,60 @@ export function startPet(root: HTMLElement): void {
       settings.focusMode ? "退出专注模式" : "进入专注模式";
     focusBadge.hidden = !settings.focusMode;
     root.classList.toggle("is-focused", settings.focusMode);
-    root.classList.toggle("is-reminding", active !== null);
+    root.classList.toggle("is-reminding", visible.length > 0);
   }
 
-  async function showNext(): Promise<void> {
-    if (active || queue.length === 0) return;
-    const reminder = queue.shift()!;
-    active = reminder;
-    characterImage.src = animations[reminder.kind];
-    characterImage.alt = `${reminder.kind} 提醒动作`;
+  function updateCharacter(): void {
+    const kind = visible[0]?.kind ?? null;
+    if (kind !== playingKind) {
+      playingKind = kind;
+      characterImage.src = kind ? animations[kind] : petImage;
+      characterImage.alt = kind ? `${kind} 提醒动作` : "蓝色闹钟桌宠";
+    }
     render();
-    localStorage.setItem(ACTIVE_KEY, JSON.stringify(reminder));
-    try {
+  }
+
+  function syncBubble(): void {
+    const snapshot = [...visible];
+    if (snapshot.length) localStorage.setItem(ACTIVE_KEY, JSON.stringify(snapshot));
+    else localStorage.removeItem(ACTIVE_KEY);
+    bubbleSync = bubbleSync.then(async () => {
       const bubble = await WebviewWindow.getByLabel("bubble");
-      if (!bubble) {
-        finishCurrent(reminder.id);
+      if (!bubble) return;
+      if (!snapshot.length) {
+        await bubble.hide();
         return;
       }
+      await resizeBubbleForReminders(snapshot.length);
       await positionBubbleNearPet();
       await bubble.show();
-      await emit("reminder-show", reminder);
-      if (active?.id !== reminder.id) return;
-      closeTimer = setTimeout(() => {
-        void bubble.hide().finally(() => finishCurrent(reminder.id));
-      }, displayMs[reminder.kind]);
-    } catch {
-      finishCurrent(reminder.id);
-    }
+      await emit("reminders-show", snapshot);
+    }).catch((error) => { console.error("Could not display reminder bubble", error); });
   }
 
-  function finishCurrent(expectedId: string): void {
-    if (active?.id !== expectedId) return;
-    if (closeTimer) clearTimeout(closeTimer);
-    closeTimer = null;
-    active = null;
-    characterImage.src = petImage;
-    characterImage.alt = "蓝色闹钟桌宠";
-    render();
-    localStorage.removeItem(ACTIVE_KEY);
-    void showNext();
+  function fillVisible(): void {
+    while (visible.length < MAX_VISIBLE_REMINDERS && pending.length) {
+      const reminder = pending.shift()!;
+      visible.push(reminder);
+      closeTimers.set(reminder.id, setTimeout(() => removeReminder(reminder.id), displayMs[reminder.kind]));
+    }
+    updateCharacter();
+    syncBubble();
+  }
+
+  function removeReminder(id: string): void {
+    const index = visible.findIndex((reminder) => reminder.id === id);
+    if (index < 0) return;
+    clearTimeout(closeTimers.get(id));
+    closeTimers.delete(id);
+    visible.splice(index, 1);
+    fillVisible();
   }
 
   function addReminders(reminders: ReminderEvent[]): void {
-    queue.push(...reminders);
-    void showNext();
+    if (!reminders.length) return;
+    pending.push(...reminders);
+    fillVisible();
   }
 
   function tick(): void {
@@ -129,14 +141,14 @@ export function startPet(root: HTMLElement): void {
 
   function testReminder(kind: ReminderKind): void {
     const titles: Record<ReminderKind, string> = {
-      eye: "请注视 6 米外物体",
+      eye: "护眼休息",
       drink: "H₂O Time",
       lunch: "午饭时间到啦",
       checkin: "叮～打卡",
       custom: "自定义提醒",
     };
     addReminders([{
-      id: `preview:${Date.now()}`,
+      id: `preview:${crypto.randomUUID()}`,
       kind,
       title: titles[kind],
       body: {
@@ -187,7 +199,7 @@ export function startPet(root: HTMLElement): void {
     }
   });
 
-  void listen<string>("reminder-closed", ({ payload }) => finishCurrent(payload));
+  void listen<string>("reminder-closed", ({ payload }) => removeReminder(payload));
   void listen("settings-changed", () => {
     settings = loadSettings();
     render();
@@ -197,7 +209,7 @@ export function startPet(root: HTMLElement): void {
   void pet.onMoved(({ payload }) => {
     settings.petPosition = { x: payload.x, y: payload.y };
     saveSettings(settings);
-    if (active) void positionBubbleNearPet();
+    if (visible.length) void positionBubbleNearPet();
   });
   void (async () => {
     const saved = settings.petPosition;
