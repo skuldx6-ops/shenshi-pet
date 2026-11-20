@@ -184,6 +184,7 @@ export function startSettings(root: HTMLElement): void {
   });
   void window.onCloseRequested((event) => {
     event.preventDefault();
+    editingId = null;
     void window.hide();
   });
   void listen<string>("edit-custom-reminder", ({ payload }) => {

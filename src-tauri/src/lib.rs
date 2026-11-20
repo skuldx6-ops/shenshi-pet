@@ -37,6 +37,7 @@ pub fn run() {
                     if let Some(window) = app.get_webview_window("custom-settings") {
                         let _ = window.show();
                         let _ = window.set_focus();
+                        let _ = app.emit("edit-custom-reminder", "");
                     }
                 }
                 "focus" => {

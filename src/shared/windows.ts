@@ -19,7 +19,7 @@ export async function showSettingsWindow(section: SettingsSection = "default", e
   if (!settings) return;
   await settings.show();
   await settings.setFocus();
-  if (editId) await emit("edit-custom-reminder", editId);
+  if (section === "custom") await emit("edit-custom-reminder", editId ?? "");
 }
 
 /** Place the menu next to the pet and keep its full width on the current screen. */
