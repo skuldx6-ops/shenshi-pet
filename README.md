@@ -28,7 +28,7 @@ src/settings/           提醒及专注设置
 src/shared/             多窗口定位
 src-tauri/              Mac/Windows 原生窗口、托盘和打包
 tests/                  定时规则测试
-scripts/optimize_animations.py  从原版动图重建优化版本（需 Pillow）
+scripts/optimize_animations.py  从原版动图重建优化版本（需 Pillow、NumPy）
 .github/workflows/      双平台构建
 ```
 
