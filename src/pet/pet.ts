@@ -1,6 +1,7 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { PhysicalPosition, availableMonitors, getCurrentWindow } from "@tauri-apps/api/window";
+import { enable as enableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
 import petImage from "../assets/pet-idle.png";
 import eyeAnimation from "../assets/animations/eye.webp";
 import drinkAnimation from "../assets/animations/drink.webp";
@@ -12,6 +13,7 @@ import type { ReminderEvent, ReminderKind } from "../reminders/schedule";
 import { MAX_VISIBLE_REMINDERS, positionBubbleNearPet, resizeBubbleForReminders, showSettingsWindow } from "../shared/windows";
 
 const ACTIVE_KEY = "shenshi-pet-active-reminder";
+const AUTOSTART_ONCE_KEY = "shenshi-pet-autostart-initialized-v1";
 const animations: Record<ReminderKind, string> = {
   eye: eyeAnimation,
   drink: drinkAnimation,
@@ -45,9 +47,9 @@ export function startPet(root: HTMLElement): void {
         <img src="${petImage}" alt="蓝色闹钟桌宠" draggable="false" />
       </button>
       <nav class="quick-menu" hidden aria-label="桌宠菜单">
-        <button data-action="focus"></button>
-        <button data-action="settings">提醒设置</button>
-        <button data-action="lunch">测试午饭提醒</button>
+        <button data-action="default">默认提醒</button>
+        <button data-action="custom">自定义提醒</button>
+        <button data-action="focus" aria-pressed="false">专注模式</button>
         <button data-action="hide">隐藏桌宠</button>
       </nav>
       <span class="focus-badge" hidden>专注中</span>
@@ -60,15 +62,15 @@ export function startPet(root: HTMLElement): void {
 
   function render(): void {
     menu.hidden = !menuOpen;
-    menu.querySelector<HTMLButtonElement>('[data-action="focus"]')!.textContent =
-      settings.focusMode ? "退出专注模式" : "进入专注模式";
+    menu.querySelector<HTMLButtonElement>('[data-action="focus"]')!
+      .setAttribute("aria-pressed", String(settings.focusMode));
     focusBadge.hidden = !settings.focusMode;
     root.classList.toggle("is-focused", settings.focusMode);
     root.classList.toggle("is-reminding", visible.length > 0);
   }
 
   function updateCharacter(): void {
-    const kind = visible[0]?.kind ?? null;
+    const kind = visible[visible.length - 1]?.kind ?? null;
     if (kind !== playingKind) {
       playingKind = kind;
       characterImage.src = kind ? animations[kind] : petImage;
@@ -139,6 +141,16 @@ export function startPet(root: HTMLElement): void {
     void emit("settings-changed");
   }
 
+  async function initializeAutostartOnce(): Promise<void> {
+    if (!import.meta.env.PROD || localStorage.getItem(AUTOSTART_ONCE_KEY)) return;
+    try {
+      if (!(await isAutostartEnabled())) await enableAutostart();
+      localStorage.setItem(AUTOSTART_ONCE_KEY, "done");
+    } catch (error) {
+      console.warn("Could not enable login startup", error);
+    }
+  }
+
   function testReminder(kind: ReminderKind): void {
     const titles: Record<ReminderKind, string> = {
       eye: "护眼休息",
@@ -192,9 +204,9 @@ export function startPet(root: HTMLElement): void {
     menuOpen = false;
     render();
     switch (action) {
+      case "default": void showSettingsWindow("default"); break;
+      case "custom": void showSettingsWindow("custom"); break;
       case "focus": toggleFocus(); break;
-      case "settings": void showSettingsWindow(); break;
-      case "lunch": testReminder("lunch"); break;
       case "hide": void pet.hide(); break;
     }
   });
@@ -223,6 +235,7 @@ export function startPet(root: HTMLElement): void {
   })();
 
   render();
+  void initializeAutostartOnce();
   tick();
   setInterval(tick, 5_000);
   window.addEventListener("focus", tick);

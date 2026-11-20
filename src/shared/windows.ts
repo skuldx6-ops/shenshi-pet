@@ -1,21 +1,25 @@
+import { emit } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { LogicalSize, PhysicalPosition, availableMonitors } from "@tauri-apps/api/window";
 
-export const MAX_VISIBLE_REMINDERS = 3;
+export const MAX_VISIBLE_REMINDERS = 5;
 const BUBBLE_WIDTH = 326;
-const ITEM_HEIGHT = 58;
-const STACK_GAP = 6;
-const STACK_PADDING = 6;
+const ITEM_HEIGHT = 64;
+const STACK_GAP = 8;
+const STACK_PADDING = 18;
 
 export function bubbleHeight(count: number): number {
   return STACK_PADDING * 2 + ITEM_HEIGHT * count + STACK_GAP * Math.max(0, count - 1);
 }
 
-export async function showSettingsWindow(): Promise<void> {
+export type SettingsSection = "default" | "custom";
+
+export async function showSettingsWindow(section: SettingsSection = "default"): Promise<void> {
   const settings = await WebviewWindow.getByLabel("settings");
   if (!settings) return;
   await settings.show();
   await settings.setFocus();
+  await emit("settings-navigate", section);
 }
 
 export async function resizeBubbleForReminders(count: number): Promise<void> {
@@ -42,7 +46,7 @@ export async function positionBubbleNearPet(): Promise<void> {
     centerY >= position.y && centerY < position.y + size.height
   ) ?? monitors[0];
 
-  const edge = Math.round(4 * (await pet.scaleFactor()));
+  const edge = Math.round(16 * (await pet.scaleFactor()));
   let x = Math.round(petPosition.x + (petSize.width - bubbleSize.width) / 2);
   let y = petPosition.y - bubbleSize.height + edge;
   if (screen) {

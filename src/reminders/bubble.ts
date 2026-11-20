@@ -1,5 +1,6 @@
 import { emit, listen } from "@tauri-apps/api/event";
-import type { ReminderEvent, ReminderKind } from "./schedule";
+import type { ReminderEvent } from "./schedule";
+import { reminderHeader } from "./header";
 
 const ACTIVE_KEY = "shenshi-pet-active-reminder";
 
@@ -9,25 +10,13 @@ function escapeHTML(value: string): string {
   })[char] ?? char);
 }
 
-/** Match the original app's orange header copy while keeping this bubble text only. */
-function header(kind: ReminderKind, now = new Date()): string {
-  if (kind === "eye") return "请注视 6 米外物体";
-  const date = `${now.getMonth() + 1}月${now.getDate()}日`;
-  switch (kind) {
-    case "drink":
-    case "custom": return `${date} 温馨提示`;
-    case "lunch": return `${date} 今天宜吃`;
-    case "checkin": return `${date} 温馨提醒`;
-  }
-}
-
 export function startBubble(root: HTMLElement): void {
   function render(reminders: ReminderEvent[]): void {
     root.innerHTML = `<div class="reminder-stack" role="group" aria-label="申时提醒">
       ${reminders.map((reminder) => `
         <section class="reminder-card" role="alert">
           <div class="reminder-copy">
-            <span class="reminder-eyebrow">${escapeHTML(header(reminder.kind))}</span>
+            <span class="reminder-eyebrow">${escapeHTML(reminderHeader(reminder.kind))}</span>
             <strong>${escapeHTML(reminder.title)}</strong>
           </div>
           <button class="bubble-close" data-id="${escapeHTML(reminder.id)}" aria-label="关闭${escapeHTML(reminder.title)}" title="关闭提醒">×</button>

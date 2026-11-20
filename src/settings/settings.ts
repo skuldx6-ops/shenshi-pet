@@ -1,8 +1,8 @@
-import { emit } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { disable as disableAutostart, enable as enableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
-import { loadSettings, saveSettings, updateFocus } from "../reminders/schedule";
+import { loadSettings, saveSettings } from "../reminders/schedule";
 import type { AppSettings, CustomReminder, ReminderKind, RepeatRule } from "../reminders/schedule";
+import type { SettingsSection } from "../shared/windows";
 
 const advances = [
   { value: 0, label: "到点" },
@@ -35,8 +35,6 @@ export function startSettings(root: HTMLElement): void {
   const window = getCurrentWindow();
   let settings = loadSettings();
   let editingId: string | null = null;
-  let autostartEnabled = false;
-  let autostartReady = false;
 
   function persist(): void {
     saveSettings(settings);
@@ -50,21 +48,10 @@ export function startSettings(root: HTMLElement): void {
     root.innerHTML = `
       <main class="settings-page">
         <header class="settings-header">
-          <div><span class="eyebrow">SHENSHI PET</span><h1>提醒与专注</h1><p>提醒会出现在桌宠头顶，拖动后自动跟随。</p></div>
+          <div><span class="eyebrow">SHENSHI PET</span><h1>提醒设置</h1><p>提醒会出现在桌宠头顶，拖动后自动跟随。</p></div>
           <button class="header-close" data-action="close" aria-label="关闭设置">×</button>
         </header>
-        <section class="setting-card focus-card">
-          <div><h2>专注模式</h2><p>暂停定时提醒，退出后重新开始护眼和饮水计时。</p></div>
-          <label class="switch"><input type="checkbox" data-setting="focusMode" ${settings.focusMode ? "checked" : ""} /><span></span></label>
-        </section>
-        <section class="setting-card">
-          <div class="setting-row">
-            <div><strong>登录后自动启动</strong><small>让桌宠在电脑登录后运行，以便按时提醒</small></div>
-            <label class="switch"><input type="checkbox" data-action="autostart" ${autostartEnabled ? "checked" : ""} ${autostartReady ? "" : "disabled"} /><span></span></label>
-          </div>
-          <p id="autostart-status" class="setting-status"></p>
-        </section>
-        <section class="setting-card">
+        <section id="default-reminders" class="setting-card">
           <h2>日常提醒</h2>
           <div class="setting-row">
             <div><strong>护眼提醒</strong><small>每隔一段时间，让眼睛休息</small></div>
@@ -89,7 +76,7 @@ export function startSettings(root: HTMLElement): void {
             ).join("")}
           </div>
         </section>
-        <section class="setting-card">
+        <section id="custom-reminders" class="setting-card">
           <div class="section-title"><div><h2>自定义提醒</h2><p>支持单次、每天、每周、每月，以及提前提醒。</p></div><span>${settings.customReminders.length} / 10</span></div>
           <div class="custom-list">
             ${settings.customReminders.length ? settings.customReminders.map((reminder) => `
@@ -162,22 +149,9 @@ export function startSettings(root: HTMLElement): void {
 
   root.addEventListener("change", (event) => {
     const input = event.target as HTMLInputElement;
-    if (input.dataset.action === "autostart") {
-      input.disabled = true;
-      void (input.checked ? enableAutostart() : disableAutostart())
-        .then(() => { autostartEnabled = input.checked; })
-        .catch(() => {
-          input.checked = autostartEnabled;
-          const status = root.querySelector<HTMLElement>("#autostart-status");
-          if (status) status.textContent = "自动启动设置失败，请重试。";
-        })
-        .finally(() => { input.disabled = false; });
-      return;
-    }
     const key = input.dataset.setting as keyof AppSettings | undefined;
     if (!key) return;
-    if (key === "focusMode") settings = updateFocus(settings, input.checked);
-    else if (key === "eyeMinutes" || key === "drinkMinutes") {
+    if (key === "eyeMinutes" || key === "drinkMinutes") {
       const minutes = Math.max(1, Math.min(240, Number(input.value) || 1));
       if (key === "eyeMinutes") {
         settings.eyeMinutes = minutes;
@@ -219,14 +193,10 @@ export function startSettings(root: HTMLElement): void {
     event.preventDefault();
     void window.hide();
   });
-  render();
-  void isAutostartEnabled().then((enabled) => {
-    autostartEnabled = enabled;
-    autostartReady = true;
-    const input = root.querySelector<HTMLInputElement>('[data-action="autostart"]');
-    if (input) { input.checked = enabled; input.disabled = false; }
-  }).catch(() => {
-    const status = root.querySelector<HTMLElement>("#autostart-status");
-    if (status) status.textContent = "无法读取自动启动状态。";
+  void listen<SettingsSection>("settings-navigate", ({ payload }) => {
+    requestAnimationFrame(() => {
+      root.querySelector<HTMLElement>(`#${payload}-reminders`)?.scrollIntoView({ block: "start" });
+    });
   });
+  render();
 }
