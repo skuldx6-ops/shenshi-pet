@@ -20,6 +20,7 @@ export interface ReminderEvent {
   title: string;
   body: string;
   at: number;
+  expiresAt?: number;
 }
 
 export interface AppSettings {

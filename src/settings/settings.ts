@@ -1,7 +1,8 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { disable as disableAutostart, enable as enableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
 import { loadSettings, saveSettings } from "../reminders/schedule";
-import type { AppSettings, CustomReminder, ReminderKind, RepeatRule } from "../reminders/schedule";
+import type { CustomReminder, ReminderKind, RepeatRule } from "../reminders/schedule";
 
 const advances = [
   { value: 0, label: "到点" },
@@ -35,6 +36,15 @@ export function startSettings(root: HTMLElement): void {
   const isCustom = window.label === "custom-settings";
   let settings = loadSettings();
   let editingId: string | null = null;
+  let autostartEnabled: boolean | null = null;
+
+  async function refreshAutostart(): Promise<void> {
+    if (isCustom) return;
+    try {
+      const enabled = await isAutostartEnabled();
+      if (autostartEnabled !== enabled) { autostartEnabled = enabled; render(); }
+    } catch (error) { console.warn("Could not read login startup setting", error); }
+  }
 
   function persist(): void {
     saveSettings(settings);
@@ -71,6 +81,12 @@ export function startSettings(root: HTMLElement): void {
             ).join("")}
           </div>
         </section>
+        <section class="setting-card autostart-card" ${isCustom ? "hidden" : ""}>
+          <div class="setting-row">
+            <div><strong>开机自启动</strong><small>登录电脑后自动运行桌宠</small></div>
+            <label class="switch"><input type="checkbox" data-setting="autostart" ${autostartEnabled ? "checked" : ""} ${autostartEnabled === null ? "disabled" : ""} /><span></span></label>
+          </div>
+        </section>
         <section id="custom-reminders" class="setting-card" ${isCustom ? "" : "hidden"}>
           <div class="section-title"><div><p>支持单次、每天、每周、每月，以及提前提醒。</p></div><span>${settings.customReminders.length} / 10</span></div>
           <div class="custom-list">
@@ -82,6 +98,8 @@ export function startSettings(root: HTMLElement): void {
                 <button class="danger" data-action="delete" data-id="${reminder.id}">删除</button>
               </article>`).join("") : '<p class="empty-state">还没有自定义提醒</p>'}
           </div>
+        </section>
+        <section id="custom-editor" class="setting-card" ${isCustom ? "" : "hidden"}>
           <form id="custom-form" class="custom-form">
             <h3>${editing ? "编辑提醒" : "添加提醒"}</h3>
             <div class="form-grid">
@@ -143,8 +161,23 @@ export function startSettings(root: HTMLElement): void {
 
   root.addEventListener("change", (event) => {
     const input = event.target as HTMLInputElement;
-    const key = input.dataset.setting as keyof AppSettings | undefined;
+    const key = input.dataset.setting;
     if (!key) return;
+    if (key === "autostart") {
+      const enabled = input.checked;
+      input.disabled = true;
+      void (async () => {
+        try {
+          if (enabled) await enableAutostart();
+          else await disableAutostart();
+          localStorage.setItem("shenshi-pet-autostart-initialized-v1", "done");
+          autostartEnabled = enabled;
+        } catch (error) { console.error("Could not update login startup", error); }
+        await refreshAutostart();
+        render();
+      })();
+      return;
+    }
     if (key === "eyeMinutes" || key === "drinkMinutes") {
       const minutes = Math.max(1, Math.min(240, Number(input.value) || 1));
       if (key === "eyeMinutes") {
@@ -198,5 +231,7 @@ export function startSettings(root: HTMLElement): void {
     settings = loadSettings();
     render();
   });
+  void window.onFocusChanged(({ payload }) => { if (payload) void refreshAutostart(); });
   render();
+  void refreshAutostart();
 }

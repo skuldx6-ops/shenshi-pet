@@ -10,6 +10,9 @@ import checkinAnimation from "../assets/animations/daka.webp";
 import customAnimation from "../assets/animations/custom.webp";
 import { collectDue, loadSettings, saveSettings, updateFocus } from "../reminders/schedule";
 import type { ReminderEvent, ReminderKind } from "../reminders/schedule";
+import { reminderDurationMs } from "../reminders/durations";
+import { closestEdge, peekX, revealX } from "./edge";
+import type { EdgeSide, Rect } from "./edge";
 import { MAX_VISIBLE_REMINDERS, positionBubbleNearPet, positionMenuNearPet, resizeBubbleForReminders } from "../shared/windows";
 
 const ACTIVE_KEY = "shenshi-pet-active-reminder";
@@ -20,13 +23,6 @@ const animations: Record<ReminderKind, string> = {
   lunch: lunchAnimation,
   checkin: checkinAnimation,
   custom: customAnimation,
-};
-const displayMs: Record<ReminderKind, number> = {
-  eye: 20_000,
-  drink: 20_000,
-  lunch: 45_000,
-  checkin: 45_000,
-  custom: 45_000,
 };
 
 export function startPet(root: HTMLElement): void {
@@ -40,6 +36,12 @@ export function startPet(root: HTMLElement): void {
   let lastMenuCloseAt = 0;
   let pointerStart: { x: number; y: number } | null = null;
   let dragged = false;
+  let isPeeking = false;
+  let autoMoving = false;
+  let peekSide: EdgeSide = "left";
+  let peekScreen: Rect | null = null;
+  let motionToken = 0;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
   root.innerHTML = `
     <main class="pet-stage">
@@ -57,6 +59,71 @@ export function startPet(root: HTMLElement): void {
     focusBadge.hidden = !settings.focusMode;
     root.classList.toggle("is-focused", settings.focusMode);
     root.classList.toggle("is-reminding", visible.length > 0);
+    root.classList.toggle("is-peeking", isPeeking);
+  }
+
+  function schedulePeek(): void {
+    if (idleTimer) clearTimeout(idleTimer);
+    if (visible.length) return;
+    idleTimer = setTimeout(() => { void enterPeek().catch((error) => {
+      console.warn("Could not enter edge standby", error);
+      isPeeking = false;
+      autoMoving = false;
+      root.classList.remove("is-walking");
+      render();
+    }); }, 120_000);
+  }
+
+  async function enterPeek(): Promise<void> {
+    if (isPeeking || visible.length || dragged) return;
+    if (!await pet.isVisible()) return;
+    const menu = await WebviewWindow.getByLabel("menu");
+    if (menu && await menu.isVisible()) { schedulePeek(); return; }
+    const [position, size, monitors] = await Promise.all([pet.outerPosition(), pet.outerSize(), availableMonitors()]);
+    const screen = monitors.find(({ position: origin, size: bounds }) =>
+      position.x + size.width / 2 >= origin.x && position.x + size.width / 2 < origin.x + bounds.width &&
+      position.y + size.height / 2 >= origin.y && position.y + size.height / 2 < origin.y + bounds.height
+    ) ?? monitors[0];
+    if (!screen) return;
+    const petRect = { x: position.x, y: position.y, width: size.width, height: size.height };
+    const screenRect = { x: screen.position.x, y: screen.position.y, width: screen.size.width, height: screen.size.height };
+    peekScreen = screenRect;
+    peekSide = closestEdge(petRect, screenRect);
+    const targetX = peekX(petRect, screenRect, peekSide);
+    const token = ++motionToken;
+    isPeeking = true;
+    autoMoving = true;
+    root.classList.add("is-walking");
+    render();
+    for (let step = 1; step <= 12 && token === motionToken; step += 1) {
+      const x = Math.round(position.x + (targetX - position.x) * step / 12);
+      await pet.setPosition(new PhysicalPosition(x, position.y));
+      await new Promise((resolve) => setTimeout(resolve, 45));
+    }
+    root.classList.remove("is-walking");
+    if (token === motionToken) setTimeout(() => { if (token === motionToken) autoMoving = false; }, 200);
+  }
+
+  async function revealFromEdge(): Promise<void> {
+    if (!isPeeking) return;
+    const token = ++motionToken;
+    isPeeking = false;
+    autoMoving = true;
+    root.classList.remove("is-walking");
+    render();
+    const [position, size] = await Promise.all([pet.outerPosition(), pet.outerSize()]);
+    if (!peekScreen) { autoMoving = false; return; }
+    const x = revealX(
+      { x: position.x, y: position.y, width: size.width, height: size.height },
+      peekScreen,
+      peekSide,
+    );
+    await pet.setPosition(new PhysicalPosition(x, position.y));
+    settings.petPosition = { x, y: position.y };
+    saveSettings(settings);
+    if (visible.length) await positionBubbleNearPet();
+    setTimeout(() => { if (token === motionToken) autoMoving = false; }, 200);
+    schedulePeek();
   }
 
   function updateCharacter(): void {
@@ -89,12 +156,14 @@ export function startPet(root: HTMLElement): void {
 
   function fillVisible(): void {
     while (visible.length < MAX_VISIBLE_REMINDERS && pending.length) {
-      const reminder = pending.shift()!;
+      const next = pending.shift()!;
+      const reminder = { ...next, expiresAt: Date.now() + reminderDurationMs[next.kind] };
       visible.push(reminder);
-      closeTimers.set(reminder.id, setTimeout(() => removeReminder(reminder.id), displayMs[reminder.kind]));
+      closeTimers.set(reminder.id, setTimeout(() => removeReminder(reminder.id), reminderDurationMs[reminder.kind]));
     }
     updateCharacter();
     syncBubble();
+    schedulePeek();
   }
 
   function removeReminder(id: string): void {
@@ -109,7 +178,11 @@ export function startPet(root: HTMLElement): void {
   function addReminders(reminders: ReminderEvent[]): void {
     if (!reminders.length) return;
     pending.push(...reminders);
-    fillVisible();
+    if (isPeeking) void revealFromEdge().catch((error) => {
+      console.warn("Could not reveal pet for reminder", error);
+      autoMoving = false;
+    }).then(fillVisible);
+    else fillVisible();
   }
 
   function tick(): void {
@@ -188,12 +261,22 @@ export function startPet(root: HTMLElement): void {
     const delta = Math.hypot(event.screenX - pointerStart.x, event.screenY - pointerStart.y);
     if (delta > 5) {
       dragged = true;
+      motionToken += 1;
+      isPeeking = false;
+      autoMoving = false;
+      root.classList.remove("is-walking");
+      render();
       void pet.startDragging();
     }
   });
   character.addEventListener("pointerup", () => {
-    if (!dragged && Date.now() - lastMenuCloseAt > 250) void toggleMenu();
+    if (!dragged && Date.now() - lastMenuCloseAt > 250) void revealFromEdge().catch((error) => {
+      console.warn("Could not reveal pet for menu", error);
+      autoMoving = false;
+    }).then(() => toggleMenu());
     pointerStart = null;
+    dragged = false;
+    schedulePeek();
   });
   character.addEventListener("contextmenu", (event) => {
     event.preventDefault();
@@ -210,10 +293,12 @@ export function startPet(root: HTMLElement): void {
   void listen("menu-closed", () => { lastMenuCloseAt = Date.now(); });
   void listen<ReminderKind>("preview-reminder", ({ payload }) => testReminder(payload));
   void pet.onMoved(({ payload }) => {
+    if (autoMoving || isPeeking) return;
     settings.petPosition = { x: payload.x, y: payload.y };
     saveSettings(settings);
     if (visible.length) void positionBubbleNearPet();
     void positionMenuNearPet(188);
+    schedulePeek();
   });
   void (async () => {
     const saved = settings.petPosition;
@@ -227,6 +312,7 @@ export function startPet(root: HTMLElement): void {
   })();
 
   render();
+  schedulePeek();
   void initializeAutostartOnce();
   tick();
   setInterval(tick, 5_000);
