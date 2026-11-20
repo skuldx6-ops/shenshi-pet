@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { startPet } from "./pet/pet";
 import { startBubble } from "./reminders/bubble";
 import { startSettings } from "./settings/settings";
+import { startMenu } from "./menu/menu";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Missing app mount point");
@@ -15,7 +16,11 @@ switch (getCurrentWindow().label) {
   case "bubble":
     startBubble(app);
     break;
-  case "settings":
+  case "menu":
+    startMenu(app);
+    break;
+  case "default-settings":
+  case "custom-settings":
     startSettings(app);
     break;
   default:

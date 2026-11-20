@@ -1,6 +1,6 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { PhysicalPosition, availableMonitors, getCurrentWindow } from "@tauri-apps/api/window";
+import { LogicalSize, PhysicalPosition, availableMonitors, getCurrentWindow } from "@tauri-apps/api/window";
 import { enable as enableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
 import petImage from "../assets/pet-idle.png";
 import eyeAnimation from "../assets/animations/eye.webp";
@@ -10,7 +10,7 @@ import checkinAnimation from "../assets/animations/daka.webp";
 import customAnimation from "../assets/animations/custom.webp";
 import { collectDue, loadSettings, saveSettings, updateFocus } from "../reminders/schedule";
 import type { ReminderEvent, ReminderKind } from "../reminders/schedule";
-import { MAX_VISIBLE_REMINDERS, positionBubbleNearPet, resizeBubbleForReminders, showSettingsWindow } from "../shared/windows";
+import { MAX_VISIBLE_REMINDERS, positionBubbleNearPet, positionMenuNearPet, resizeBubbleForReminders } from "../shared/windows";
 
 const ACTIVE_KEY = "shenshi-pet-active-reminder";
 const AUTOSTART_ONCE_KEY = "shenshi-pet-autostart-initialized-v1";
@@ -37,7 +37,7 @@ export function startPet(root: HTMLElement): void {
   const closeTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let bubbleSync: Promise<void> = Promise.resolve();
   let playingKind: ReminderKind | null = null;
-  let menuOpen = false;
+  let lastMenuCloseAt = 0;
   let pointerStart: { x: number; y: number } | null = null;
   let dragged = false;
 
@@ -46,24 +46,14 @@ export function startPet(root: HTMLElement): void {
       <button class="pet-character" aria-label="申时桌宠：点击打开菜单，拖动可移动" title="点击打开菜单 · 拖动可移动">
         <img src="${petImage}" alt="蓝色闹钟桌宠" draggable="false" />
       </button>
-      <nav class="quick-menu" hidden aria-label="桌宠菜单">
-        <button data-action="default">默认提醒</button>
-        <button data-action="custom">自定义提醒</button>
-        <button data-action="focus" aria-pressed="false">专注模式</button>
-        <button data-action="hide">隐藏桌宠</button>
-      </nav>
       <span class="focus-badge" hidden>专注中</span>
     </main>`;
 
   const character = root.querySelector<HTMLButtonElement>(".pet-character")!;
   const characterImage = character.querySelector<HTMLImageElement>("img")!;
-  const menu = root.querySelector<HTMLElement>(".quick-menu")!;
   const focusBadge = root.querySelector<HTMLElement>(".focus-badge")!;
 
   function render(): void {
-    menu.hidden = !menuOpen;
-    menu.querySelector<HTMLButtonElement>('[data-action="focus"]')!
-      .setAttribute("aria-pressed", String(settings.focusMode));
     focusBadge.hidden = !settings.focusMode;
     root.classList.toggle("is-focused", settings.focusMode);
     root.classList.toggle("is-reminding", visible.length > 0);
@@ -141,6 +131,20 @@ export function startPet(root: HTMLElement): void {
     void emit("settings-changed");
   }
 
+  async function toggleMenu(forceOpen = false): Promise<void> {
+    const menu = await WebviewWindow.getByLabel("menu");
+    if (!menu) return;
+    if (!forceOpen && await menu.isVisible()) {
+      await menu.hide();
+      return;
+    }
+    await menu.setSize(new LogicalSize(188, 330));
+    await positionMenuNearPet(188);
+    await emit("menu-refresh");
+    await menu.show();
+    await menu.setFocus();
+  }
+
   async function initializeAutostartOnce(): Promise<void> {
     if (!import.meta.env.PROD || localStorage.getItem(AUTOSTART_ONCE_KEY)) return;
     try {
@@ -188,27 +192,12 @@ export function startPet(root: HTMLElement): void {
     }
   });
   character.addEventListener("pointerup", () => {
-    if (!dragged) {
-      menuOpen = !menuOpen;
-      render();
-    }
+    if (!dragged && Date.now() - lastMenuCloseAt > 250) void toggleMenu();
     pointerStart = null;
   });
   character.addEventListener("contextmenu", (event) => {
     event.preventDefault();
-    menuOpen = true;
-    render();
-  });
-  menu.addEventListener("click", (event) => {
-    const action = (event.target as HTMLElement).closest<HTMLButtonElement>("button")?.dataset.action;
-    menuOpen = false;
-    render();
-    switch (action) {
-      case "default": void showSettingsWindow("default"); break;
-      case "custom": void showSettingsWindow("custom"); break;
-      case "focus": toggleFocus(); break;
-      case "hide": void pet.hide(); break;
-    }
+    void toggleMenu(true);
   });
 
   void listen<string>("reminder-closed", ({ payload }) => removeReminder(payload));
@@ -217,11 +206,14 @@ export function startPet(root: HTMLElement): void {
     render();
   });
   void listen("tray-toggle-focus", toggleFocus);
+  void listen("menu-hide-pet", () => { void pet.hide(); });
+  void listen("menu-closed", () => { lastMenuCloseAt = Date.now(); });
   void listen<ReminderKind>("preview-reminder", ({ payload }) => testReminder(payload));
   void pet.onMoved(({ payload }) => {
     settings.petPosition = { x: payload.x, y: payload.y };
     saveSettings(settings);
     if (visible.length) void positionBubbleNearPet();
+    void positionMenuNearPet(188);
   });
   void (async () => {
     const saved = settings.petPosition;

@@ -40,15 +40,40 @@
         "visibleOnAllWorkspaces": true
       },
       {
-        "label": "settings",
-        "title": "申时桌宠设置",
+        "label": "menu",
+        "title": "申时桌宠菜单",
+        "width": 188,
+        "height": 330,
+        "visible": false,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visibleOnAllWorkspaces": true
+      },
+      {
+        "label": "default-settings",
+        "title": "默认提醒",
         "width": 540,
-        "height": 720,
+        "height": 415,
         "center": true,
         "visible": false,
         "resizable": true,
         "minWidth": 480,
-        "minHeight": 520
+        "minHeight": 380
+      },
+      {
+        "label": "custom-settings",
+        "title": "自定义提醒",
+        "width": 560,
+        "height": 660,
+        "center": true,
+        "visible": false,
+        "resizable": true,
+        "minWidth": 480,
+        "minHeight": 500
       }
     ],
     "security": {

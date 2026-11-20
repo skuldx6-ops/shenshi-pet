@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { collectDue, defaultSettings, updateFocus } from "../src/reminders/schedule.ts";
+import { collectDue, defaultSettings, nextCustomReminderAt, updateFocus } from "../src/reminders/schedule.ts";
 
 function at(year, month, date, hour, minute) {
   return new Date(year, month - 1, date, hour, minute);
@@ -72,4 +72,16 @@ test("one-week advance notice fires on the correct day", () => {
     enabled: true,
   }];
   assert.equal(collectDue(settings, now).due.filter((event) => event.kind === "custom").length, 1);
+});
+
+test("custom menu shows the next local occurrence, including distant one-time dates", () => {
+  const now = at(2026, 11, 20, 13, 0);
+  const daily = { id: "daily", title: "喝药", hour: 12, minute: 0, repeat: "daily", advanceMinutes: [0], enabled: true };
+  assert.equal(nextCustomReminderAt(daily, now)?.getTime(), at(2026, 11, 21, 12, 0).getTime());
+  const weekly = { ...daily, repeat: "weekly", weekdays: [1] };
+  assert.equal(nextCustomReminderAt(weekly, now)?.getTime(), at(2026, 11, 23, 12, 0).getTime());
+  const once = { ...daily, repeat: "once", date: "2028-01-01" };
+  assert.equal(nextCustomReminderAt(once, now)?.getTime(), at(2028, 1, 1, 12, 0).getTime());
+  assert.equal(nextCustomReminderAt({ ...daily, advanceMinutes: [0, 5] }, at(2026, 11, 20, 11, 50))?.getTime(), at(2026, 11, 20, 11, 55).getTime());
+  assert.equal(nextCustomReminderAt({ ...once, date: "2025-01-01" }, now), null);
 });

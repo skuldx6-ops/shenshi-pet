@@ -14,12 +14,37 @@ export function bubbleHeight(count: number): number {
 
 export type SettingsSection = "default" | "custom";
 
-export async function showSettingsWindow(section: SettingsSection = "default"): Promise<void> {
-  const settings = await WebviewWindow.getByLabel("settings");
+export async function showSettingsWindow(section: SettingsSection = "default", editId?: string): Promise<void> {
+  const settings = await WebviewWindow.getByLabel(`${section}-settings`);
   if (!settings) return;
   await settings.show();
   await settings.setFocus();
-  await emit("settings-navigate", section);
+  if (editId) await emit("edit-custom-reminder", editId);
+}
+
+/** Place the menu next to the pet and keep its full width on the current screen. */
+export async function positionMenuNearPet(width: number): Promise<void> {
+  const pet = await WebviewWindow.getByLabel("pet");
+  const menu = await WebviewWindow.getByLabel("menu");
+  if (!pet || !menu) return;
+  const [position, size, monitors, scale] = await Promise.all([
+    pet.outerPosition(), pet.outerSize(), availableMonitors(), pet.scaleFactor(),
+  ]);
+  const screen = monitors.find(({ position: origin, size: bounds }) =>
+    position.x >= origin.x && position.x < origin.x + bounds.width &&
+    position.y >= origin.y && position.y < origin.y + bounds.height
+  ) ?? monitors[0];
+  const gap = Math.round(5 * scale);
+  const menuWidth = Math.round(width * scale);
+  const menuHeight = Math.round(330 * scale);
+  let x = position.x + size.width + gap;
+  let y = position.y + Math.round((size.height - menuHeight) / 2);
+  if (screen) {
+    if (x + menuWidth > screen.position.x + screen.size.width - gap) x = position.x - menuWidth - gap;
+    x = Math.max(screen.position.x + gap, Math.min(x, screen.position.x + screen.size.width - menuWidth - gap));
+    y = Math.max(screen.position.y + gap, Math.min(y, screen.position.y + screen.size.height - menuHeight - gap));
+  }
+  await menu.setPosition(new PhysicalPosition(x, y));
 }
 
 export async function resizeBubbleForReminders(count: number): Promise<void> {

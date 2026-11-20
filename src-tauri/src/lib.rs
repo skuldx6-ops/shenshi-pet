@@ -13,10 +13,11 @@ pub fn run() {
                 None,
             ))?;
             let show = MenuItem::with_id(app, "show", "显示桌宠", true, None::<&str>)?;
-            let settings = MenuItem::with_id(app, "settings", "提醒设置", true, None::<&str>)?;
+            let settings = MenuItem::with_id(app, "settings", "默认提醒", true, None::<&str>)?;
+            let custom = MenuItem::with_id(app, "custom", "自定义提醒", true, None::<&str>)?;
             let focus = MenuItem::with_id(app, "focus", "切换专注模式", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出申时桌宠", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &settings, &focus, &quit])?;
+            let menu = Menu::with_items(app, &[&show, &settings, &custom, &focus, &quit])?;
 
             let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
             let tray = TrayIconBuilder::new().menu(&menu).icon(tray_icon);
@@ -27,7 +28,13 @@ pub fn run() {
                     }
                 }
                 "settings" => {
-                    if let Some(window) = app.get_webview_window("settings") {
+                    if let Some(window) = app.get_webview_window("default-settings") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+                "custom" => {
+                    if let Some(window) = app.get_webview_window("custom-settings") {
                         let _ = window.show();
                         let _ = window.set_focus();
                     }
@@ -44,7 +51,7 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "settings" || window.label() == "pet" {
+                if matches!(window.label(), "default-settings" | "custom-settings" | "menu" | "pet") {
                     api.prevent_close();
                     let _ = window.hide();
                 }

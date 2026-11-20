@@ -110,6 +110,33 @@ function matchesDate(reminder: CustomReminder, day: Date): boolean {
   }
 }
 
+/** Next scheduled occurrence of a custom item in the user's local time zone. */
+export function nextCustomReminderAt(reminder: CustomReminder, now = new Date()): Date | null {
+  const current = now.getTime();
+  const advances = reminder.advanceMinutes.length ? reminder.advanceMinutes : [0];
+  let earliest = Infinity;
+  const consider = (target: number): void => {
+    for (const advance of advances) {
+      const at = target - advance * 60_000;
+      if (at >= current && at < earliest) earliest = at;
+    }
+  };
+  if (reminder.repeat === "once") {
+    if (!reminder.date) return null;
+    const [year, month, date] = reminder.date.split("-").map(Number);
+    const target = new Date(year, month - 1, date, reminder.hour, reminder.minute);
+    if (Number.isFinite(target.getTime())) consider(target.getTime());
+    return Number.isFinite(earliest) ? new Date(earliest) : null;
+  }
+  for (let offset = 0; offset <= 373; offset += 1) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+    if (!matchesDate(reminder, day)) continue;
+    const target = new Date(day.getFullYear(), day.getMonth(), day.getDate(), reminder.hour, reminder.minute);
+    consider(target.getTime());
+  }
+  return Number.isFinite(earliest) ? new Date(earliest) : null;
+}
+
 function dueWithin(now: number, at: number, windowMs = catchUpMs): boolean {
   return now >= at && now - at < windowMs;
 }
