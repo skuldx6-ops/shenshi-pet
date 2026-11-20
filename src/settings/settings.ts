@@ -50,7 +50,7 @@ export function startSettings(root: HTMLElement): void {
     root.innerHTML = `
       <main class="settings-page">
         <header class="settings-header">
-          <div><span class="eyebrow">SHENSHI PET</span><h1>提醒与专注</h1><p>提醒会出现在桌宠旁边，拖动后自动跟随。</p></div>
+          <div><span class="eyebrow">SHENSHI PET</span><h1>提醒与专注</h1><p>提醒会出现在桌宠头顶，拖动后自动跟随。</p></div>
           <button class="header-close" data-action="close" aria-label="关闭设置">×</button>
         </header>
         <section class="setting-card focus-card">

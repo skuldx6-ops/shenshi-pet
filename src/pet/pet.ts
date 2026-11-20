@@ -2,11 +2,30 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { PhysicalPosition, availableMonitors, getCurrentWindow } from "@tauri-apps/api/window";
 import petImage from "../assets/pet-idle.png";
+import eyeAnimation from "../assets/animations/eye.webp";
+import drinkAnimation from "../assets/animations/drink.webp";
+import lunchAnimation from "../assets/animations/lunch.webp";
+import checkinAnimation from "../assets/animations/daka.webp";
+import customAnimation from "../assets/animations/custom.webp";
 import { collectDue, loadSettings, saveSettings, updateFocus } from "../reminders/schedule";
 import type { ReminderEvent, ReminderKind } from "../reminders/schedule";
 import { positionBubbleNearPet, showSettingsWindow } from "../shared/windows";
 
 const ACTIVE_KEY = "shenshi-pet-active-reminder";
+const animations: Record<ReminderKind, string> = {
+  eye: eyeAnimation,
+  drink: drinkAnimation,
+  lunch: lunchAnimation,
+  checkin: checkinAnimation,
+  custom: customAnimation,
+};
+const displayMs: Record<ReminderKind, number> = {
+  eye: 20_000,
+  drink: 20_000,
+  lunch: 45_000,
+  checkin: 45_000,
+  custom: 45_000,
+};
 
 export function startPet(root: HTMLElement): void {
   const pet = getCurrentWindow();
@@ -33,6 +52,7 @@ export function startPet(root: HTMLElement): void {
     </main>`;
 
   const character = root.querySelector<HTMLButtonElement>(".pet-character")!;
+  const characterImage = character.querySelector<HTMLImageElement>("img")!;
   const menu = root.querySelector<HTMLElement>(".quick-menu")!;
   const focusBadge = root.querySelector<HTMLElement>(".focus-badge")!;
 
@@ -42,27 +62,43 @@ export function startPet(root: HTMLElement): void {
       settings.focusMode ? "退出专注模式" : "进入专注模式";
     focusBadge.hidden = !settings.focusMode;
     root.classList.toggle("is-focused", settings.focusMode);
+    root.classList.toggle("is-reminding", active !== null);
   }
 
   async function showNext(): Promise<void> {
     if (active || queue.length === 0) return;
-    active = queue.shift()!;
-    localStorage.setItem(ACTIVE_KEY, JSON.stringify(active));
-    const bubble = await WebviewWindow.getByLabel("bubble");
-    if (!bubble) {
-      active = null;
-      return;
+    const reminder = queue.shift()!;
+    active = reminder;
+    characterImage.src = animations[reminder.kind];
+    characterImage.alt = `${reminder.kind} 提醒动作`;
+    render();
+    localStorage.setItem(ACTIVE_KEY, JSON.stringify(reminder));
+    try {
+      const bubble = await WebviewWindow.getByLabel("bubble");
+      if (!bubble) {
+        finishCurrent(reminder.id);
+        return;
+      }
+      await positionBubbleNearPet();
+      await bubble.show();
+      await emit("reminder-show", reminder);
+      if (active?.id !== reminder.id) return;
+      closeTimer = setTimeout(() => {
+        void bubble.hide().finally(() => finishCurrent(reminder.id));
+      }, displayMs[reminder.kind]);
+    } catch {
+      finishCurrent(reminder.id);
     }
-    await positionBubbleNearPet();
-    await bubble.show();
-    await emit("reminder-show", active);
-    closeTimer = setTimeout(() => void bubble.hide().then(() => finishCurrent()), 120_000);
   }
 
-  function finishCurrent(): void {
+  function finishCurrent(expectedId: string): void {
+    if (active?.id !== expectedId) return;
     if (closeTimer) clearTimeout(closeTimer);
     closeTimer = null;
     active = null;
+    characterImage.src = petImage;
+    characterImage.alt = "蓝色闹钟桌宠";
+    render();
     localStorage.removeItem(ACTIVE_KEY);
     void showNext();
   }
@@ -93,17 +129,23 @@ export function startPet(root: HTMLElement): void {
 
   function testReminder(kind: ReminderKind): void {
     const titles: Record<ReminderKind, string> = {
-      eye: "休息一下眼睛",
-      drink: "喝点水吧",
-      lunch: "午饭时间到了",
-      checkin: "记得打卡",
+      eye: "请注视 6 米外物体",
+      drink: "H₂O Time",
+      lunch: "午饭时间到啦",
+      checkin: "叮～打卡",
       custom: "自定义提醒",
     };
     addReminders([{
       id: `preview:${Date.now()}`,
       kind,
       title: titles[kind],
-      body: kind === "lunch" ? "先吃饭，等会儿再继续忙。" : "这是一条提醒预览。",
+      body: {
+        eye: "给瞳孔放个短假，让世界重回清晰。",
+        drink: "吨吨吨！干杯！",
+        lunch: "需求可以再改，干饭不能迟到。",
+        checkin: "打卡，是对贫穷最起码的尊重。",
+        custom: "这是一条提醒预览。",
+      }[kind],
       at: Date.now(),
     }]);
   }
@@ -145,7 +187,7 @@ export function startPet(root: HTMLElement): void {
     }
   });
 
-  void listen("reminder-closed", finishCurrent);
+  void listen<string>("reminder-closed", ({ payload }) => finishCurrent(payload));
   void listen("settings-changed", () => {
     settings = loadSettings();
     render();

@@ -1,16 +1,16 @@
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ReminderEvent, ReminderKind } from "./schedule";
-import eye from "../assets/animations/eye.webp";
-import drink from "../assets/animations/drink.webp";
-import lunch from "../assets/animations/lunch.webp";
-import daka from "../assets/animations/daka.webp";
-import custom from "../assets/animations/custom.webp";
 
-const images: Record<ReminderKind, string> = {
-  eye, drink, lunch, checkin: daka, custom,
-};
 const ACTIVE_KEY = "shenshi-pet-active-reminder";
+const PLACEMENT_KEY = "shenshi-pet-bubble-placement";
+const captions: Record<ReminderKind, string> = {
+  eye: "护眼提醒",
+  drink: "饮水提醒",
+  lunch: "11:30 午饭提醒",
+  checkin: "温馨提醒",
+  custom: "自定义提醒",
+};
 
 function escapeHTML(value: string): string {
   return value.replace(/[&<>"']/g, (char) => ({
@@ -20,16 +20,18 @@ function escapeHTML(value: string): string {
 
 export function startBubble(root: HTMLElement): void {
   const bubble = getCurrentWindow();
+  let current: ReminderEvent | null = null;
 
   function render(reminder: ReminderEvent | null): void {
+    current = reminder;
     if (!reminder) {
       root.innerHTML = "";
       return;
     }
     root.innerHTML = `
       <section class="reminder-card" role="alert">
-        <img class="reminder-image" src="${images[reminder.kind]}" alt="" />
         <div class="reminder-copy">
+          <span class="reminder-eyebrow">${captions[reminder.kind]}</span>
           <strong>${escapeHTML(reminder.title)}</strong>
           <p>${escapeHTML(reminder.body)}</p>
         </div>
@@ -39,13 +41,20 @@ export function startBubble(root: HTMLElement): void {
   }
 
   async function close(): Promise<void> {
+    const id = current?.id;
+    if (!id) return;
     await bubble.hide();
-    await emit("reminder-closed");
+    render(null);
+    await emit("reminder-closed", id);
   }
 
+  document.body.dataset.placement = localStorage.getItem(PLACEMENT_KEY) ?? "above";
   const saved = localStorage.getItem(ACTIVE_KEY);
   if (saved) {
     try { render(JSON.parse(saved) as ReminderEvent); } catch { /* ignore stale content */ }
   }
   void listen<ReminderEvent>("reminder-show", ({ payload }) => render(payload));
+  void listen<"above" | "below">("bubble-placement", ({ payload }) => {
+    document.body.dataset.placement = payload;
+  });
 }

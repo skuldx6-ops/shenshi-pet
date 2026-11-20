@@ -18,10 +18,8 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "退出申时桌宠", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &settings, &focus, &quit])?;
 
-            let mut tray = TrayIconBuilder::new().menu(&menu);
-            if let Some(icon) = app.default_window_icon() {
-                tray = tray.icon(icon.clone());
-            }
+            let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
+            let tray = TrayIconBuilder::new().menu(&menu).icon(tray_icon);
             tray.on_menu_event(|app, event| match event.id.as_ref() {
                 "show" => {
                     if let Some(window) = app.get_webview_window("pet") {

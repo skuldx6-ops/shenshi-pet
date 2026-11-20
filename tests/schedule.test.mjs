@@ -10,11 +10,19 @@ test("lunch appears at 11:30 once per local day, without food suggestions", () =
   const settings = defaultSettings(at(2026, 11, 20, 8, 0));
   const first = collectDue(settings, at(2026, 11, 20, 11, 30));
   assert.deepEqual(first.due.map((event) => event.kind), ["lunch"]);
-  assert.equal(first.due[0].title, "午饭时间到了");
+  assert.equal(first.due[0].title, "午饭时间到啦");
   const second = collectDue(first.settings, at(2026, 11, 20, 11, 31));
   assert.equal(second.due.length, 0);
   const tomorrow = collectDue(second.settings, at(2026, 11, 21, 11, 30));
   assert.equal(tomorrow.due.filter((event) => event.kind === "lunch").length, 1);
+});
+
+test("check-in keeps the original headline at both daily times", () => {
+  const settings = defaultSettings(at(2026, 11, 20, 8, 0));
+  const morning = collectDue(settings, at(2026, 11, 20, 9, 0));
+  assert.equal(morning.due.find((event) => event.kind === "checkin")?.title, "叮～打卡");
+  const evening = collectDue(morning.settings, at(2026, 11, 20, 18, 0));
+  assert.equal(evening.due.find((event) => event.kind === "checkin")?.title, "叮～打卡");
 });
 
 test("focus suppresses routine reminders and restarts intervals on exit", () => {

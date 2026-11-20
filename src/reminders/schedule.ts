@@ -146,22 +146,22 @@ export function collectDue(settings: AppSettings, now = new Date()): {
   if (!next.focusMode) {
     if (next.eyeEnabled && current >= next.nextEyeAt) {
       if (dueWithin(current, next.nextEyeAt)) {
-        due.push({ id: `eye:${next.nextEyeAt}`, kind: "eye", title: "休息一下眼睛", body: "看看远处，放松双眼。", at: next.nextEyeAt });
+        due.push({ id: `eye:${next.nextEyeAt}`, kind: "eye", title: "请注视 6 米外物体", body: "给瞳孔放个短假，让世界重回清晰。", at: next.nextEyeAt });
       }
       next.nextEyeAt = current + Math.max(next.eyeMinutes, 1) * 60_000;
     }
     if (next.drinkEnabled && current >= next.nextDrinkAt) {
       if (dueWithin(current, next.nextDrinkAt)) {
-        due.push({ id: `drink:${next.nextDrinkAt}`, kind: "drink", title: "喝点水吧", body: "起来活动一下，补充一点水分。", at: next.nextDrinkAt });
+        due.push({ id: `drink:${next.nextDrinkAt}`, kind: "drink", title: "H₂O Time", body: "吨吨吨！干杯！", at: next.nextDrinkAt });
       }
       next.nextDrinkAt = current + Math.max(next.drinkMinutes, 1) * 60_000;
     }
     if (next.lunchEnabled) {
-      fixedDaily(now, 11, 30, "lunch", "lunch", "午饭时间到了", "先吃饭，等会儿再继续忙。", next.fired, due, 60 * 60_000);
+      fixedDaily(now, 11, 30, "lunch", "lunch", "午饭时间到啦", "需求可以再改，干饭不能迟到。", next.fired, due, 60 * 60_000);
     }
     if (next.checkinEnabled) {
-      fixedDaily(now, 9, 0, "checkin-am", "checkin", "早间打卡提醒", "记得完成上午打卡。", next.fired, due);
-      fixedDaily(now, 18, 0, "checkin-pm", "checkin", "晚间打卡提醒", "离开前记得打卡。", next.fired, due);
+      fixedDaily(now, 9, 0, "checkin-am", "checkin", "叮～打卡", "打卡，是对贫穷最起码的尊重。", next.fired, due);
+      fixedDaily(now, 18, 0, "checkin-pm", "checkin", "叮～打卡", "打卡，是对贫穷最起码的尊重。", next.fired, due);
     }
     for (const reminder of next.customReminders) {
       if (!reminder.enabled || !reminder.title.trim()) continue;
