@@ -133,7 +133,7 @@ body[data-window="bubble"]::-webkit-scrollbar { display: none; }
 .reminder-copy { min-width: 0; }
 .reminder-eyebrow { display: block; color: #ff9d00; font-size: 11px; font-weight: 700; line-height: 1.2; }
 .reminder-copy strong { display: block; margin-top: 6px; color: #1f2733; font-size: 22px; font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.eye-countdown { font-size: 16px; font-variant-numeric: tabular-nums; color: #50739c; }
+.eye-countdown { font-size: inherit; font-variant-numeric: tabular-nums; color: inherit; }
 .bubble-close {
   position: absolute; right: 13px; top: 19px;
   width: 27px; height: 27px;

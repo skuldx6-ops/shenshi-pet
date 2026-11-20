@@ -18,7 +18,7 @@ export function startBubble(root: HTMLElement): void {
         <section class="reminder-card" role="alert">
           <div class="reminder-copy">
             <span class="reminder-eyebrow">${escapeHTML(reminderHeader(reminder.kind))}</span>
-            <strong>${escapeHTML(reminder.title)}${reminder.kind === "eye" && reminder.expiresAt ? ` <span class="eye-countdown" data-expires="${reminder.expiresAt}">${remainingSeconds(reminder.expiresAt)}s</span>` : ""}</strong>
+            <strong>${reminder.kind === "eye" && reminder.expiresAt ? `<span class="eye-countdown" data-expires="${reminder.expiresAt}">${remainingSeconds(reminder.expiresAt)}s</span>` : escapeHTML(reminder.title)}</strong>
           </div>
           <button class="bubble-close" data-id="${escapeHTML(reminder.id)}" aria-label="关闭${escapeHTML(reminder.title)}" title="关闭提醒">×</button>
         </section>`).join("")}

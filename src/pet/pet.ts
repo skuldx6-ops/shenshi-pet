@@ -3,11 +3,11 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { LogicalSize, PhysicalPosition, availableMonitors, getCurrentWindow } from "@tauri-apps/api/window";
 import { enable as enableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
 import petImage from "../assets/pet-idle.png";
-import eyeAnimation from "../assets/animations/eye.webp";
-import drinkAnimation from "../assets/animations/drink.webp";
-import lunchAnimation from "../assets/animations/lunch.webp";
-import checkinAnimation from "../assets/animations/daka.webp";
-import customAnimation from "../assets/animations/custom.webp";
+import eyeAnimation from "../assets/animations/optimized/eye.webp";
+import drinkAnimation from "../assets/animations/optimized/drink.webp";
+import lunchAnimation from "../assets/animations/optimized/lunch.webp";
+import checkinAnimation from "../assets/animations/optimized/daka.webp";
+import customAnimation from "../assets/animations/optimized/custom.webp";
 import { collectDue, loadSettings, saveSettings, updateFocus } from "../reminders/schedule";
 import type { ReminderEvent, ReminderKind } from "../reminders/schedule";
 import { reminderDurationMs } from "../reminders/durations";
@@ -32,7 +32,7 @@ export function startPet(root: HTMLElement): void {
   const pending: ReminderEvent[] = [];
   const closeTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let bubbleSync: Promise<void> = Promise.resolve();
-  let playingKind: ReminderKind | null = null;
+  let playingId: string | null = null;
   let lastMenuCloseAt = 0;
   let pointerStart: { x: number; y: number } | null = null;
   let dragged = false;
@@ -127,11 +127,11 @@ export function startPet(root: HTMLElement): void {
   }
 
   function updateCharacter(): void {
-    const kind = visible[visible.length - 1]?.kind ?? null;
-    if (kind !== playingKind) {
-      playingKind = kind;
-      characterImage.src = kind ? animations[kind] : petImage;
-      characterImage.alt = kind ? `${kind} 提醒动作` : "蓝色闹钟桌宠";
+    const current = visible[visible.length - 1];
+    if ((current?.id ?? null) !== playingId) {
+      playingId = current?.id ?? null;
+      characterImage.src = current ? `${animations[current.kind]}?active=${encodeURIComponent(current.id)}` : petImage;
+      characterImage.alt = current ? `${current.kind} 提醒动作` : "蓝色闹钟桌宠";
     }
     render();
   }
